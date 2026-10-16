@@ -1,0 +1,51 @@
+# Pubblicazione automatica dei dati quotidiani (docs/pubblicazione-automatica.md).
+#
+# PR dal fork ai-maps-hub/confronto-llm, branch "dati" -> verifica -> merge commit di MattiaBezzi
+# -> deploy Git di Vercel. Usa pull_request_target perche' il secret MERGE_TOKEN non e' disponibile
+# ai workflow delle PR da fork. SICUREZZA: il checkout e' quello di main (mai il codice della PR);
+# la PR viene letta solo come dati tramite l'API, e il merge e' vincolato allo SHA verificato.
+name: Pubblica dati
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+
+# Nessun permesso di default; il job chiede solo quelli che usa.
+permissions: {}
+
+# Una verifica alla volta: niente merge concorrenti ne' pubblicazioni doppie.
+concurrency:
+  group: pubblica-dati
+  cancel-in-progress: false
+
+jobs:
+  verifica-e-merge:
+    # Filtro rapido sull'evento; scripts/pubblica-dati.mjs ricontrolla tutto via API.
+    if: >-
+      github.event.pull_request.head.repo.full_name == 'ai-maps-hub/confronto-llm' &&
+      github.event.pull_request.head.repo.fork == true &&
+      github.event.pull_request.head.ref == 'dati' &&
+      github.event.pull_request.user.login == 'ai-maps-hub'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read        # lettura di main, del confronto e dei contenuti
+      pull-requests: write  # commento con l'esito sulla PR
+    steps:
+      - name: Checkout di main (codice fidato, mai quello della PR)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      # Node preinstallato sul runner (>= 20): gli script non hanno dipendenze.
+      - name: Verifica e merge
+        run: |
+          node --version
+          node scripts/pubblica-dati.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          MERGE_TOKEN: ${{ secrets.MERGE_TOKEN }}
+          PUBBLICAZIONE_AUTOMATICA: ${{ vars.PUBBLICAZIONE_AUTOMATICA }}
+          FORK_REPO_ID: ${{ vars.FORK_REPO_ID }}

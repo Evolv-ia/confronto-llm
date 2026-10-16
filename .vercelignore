@@ -1,0 +1,5 @@
+# File di servizio della repo: non fanno parte del sito pubblicato.
+.github/
+scripts/
+docs/
+CONTRIBUTING.md
